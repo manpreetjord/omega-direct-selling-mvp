@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express=require("express"),session=require("express-session"),helmet=require("helmet"),bcrypt=require("bcryptjs"),DB=require("better-sqlite3"),crypto=require("crypto"),fs=require("fs"),path=require("path");
-const app=express(),dbdir=path.join(__dirname,"data");fs.mkdirSync(dbdir,{recursive:true});const db=new DB(path.join(dbdir,"omega.sqlite"));db.pragma("journal_mode=WAL");
+const demoMode = process.env.DEMO_MODE === "true";
+const app=express(),dbdir=path.join(__dirname,"data");fs.mkdirSync(dbdir,{recursive:true});const db=new DB(path.join(dbdir, demoMode ? "omega-demo.sqlite" : "omega.sqlite"));db.pragma("journal_mode=WAL");
 db.exec(`CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,name TEXT NOT NULL,email TEXT UNIQUE NOT NULL,phone TEXT,password_hash TEXT NOT NULL,role TEXT DEFAULT 'MEMBER',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS pins(id INTEGER PRIMARY KEY,pin_hash TEXT UNIQUE NOT NULL,parent_id INTEGER,expires_at TEXT,redeemed_by INTEGER UNIQUE,created_by INTEGER,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS network(user_id INTEGER PRIMARY KEY,parent_id INTEGER UNIQUE,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -8,6 +9,39 @@ CREATE TABLE IF NOT EXISTS orders(id INTEGER PRIMARY KEY,ref TEXT UNIQUE,custome
 CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,actor_id INTEGER,action TEXT,detail TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);`);
 const q=s=>db.prepare(s),adminEmail=(process.env.ADMIN_EMAIL||"admin@example.com").toLowerCase(),adminPass=process.env.ADMIN_PASSWORD||"ChangeThisImmediately123!";
 if(!q("SELECT id FROM users WHERE email=?").get(adminEmail))q("INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,'ADMIN')").run("Store Administrator",adminEmail,bcrypt.hashSync(adminPass,12));
+if (demoMode) {
+  const password = crypto.randomBytes(16).toString("hex");
+  const seeded = db.transaction(() => {
+    if (q("SELECT 1 FROM audit WHERE action = 'DEMO_SEEDED'").get()) return false;
+
+    const passwordHash = bcrypt.hashSync(password, 12);
+    const insertMember = q("INSERT INTO users(name, email, password_hash) VALUES (?, ?, ?)");
+    const insertNetwork = q("INSERT INTO network(user_id, parent_id) VALUES (?, ?)");
+    let parentId = null;
+    for (const name of ["Asha", "Ravi", "Neha", "Kabir"]) {
+      const email = name.toLowerCase() + "@omega-demo.example";
+      const { lastInsertRowid } = insertMember.run(name + " (Demo)", email, passwordHash);
+      insertNetwork.run(lastInsertRowid, parentId);
+      parentId = lastInsertRowid;
+    }
+
+    const insertOrder = q(`INSERT INTO orders(ref, customer_name, email, address, qty, total_paise, status)
+      VALUES (?, ?, ?, ?, ?, ?, 'REQUEST_RECEIVED')`);
+    for (const [index, quantity] of [1, 2, 1, 3].entries()) {
+      const number = index + 1;
+      insertOrder.run("DEMO-" + number, "Demo Customer " + number,
+        "customer" + number + "@omega-demo.example", "Demo address", quantity, quantity * Number(process.env.PRODUCT_PRICE_PAISE || 100000));
+    }
+
+    q("INSERT INTO audit(action) VALUES ('DEMO_SEEDED')").run();
+    return true;
+  }).immediate();
+
+  if (seeded) {
+    console.log("Demo members: asha, ravi, neha, and kabir at @omega-demo.example");
+    console.log("Demo member password (shown on first seed only): " + password);
+  }
+}
 app.use(helmet({contentSecurityPolicy:false}));app.use(express.json({limit:"50kb"}));app.use(express.urlencoded({extended:false}));app.use(session({secret:process.env.SESSION_SECRET||"dev-secret-change-me",resave:false,saveUninitialized:false,cookie:{httpOnly:true,sameSite:"lax",secure:process.env.NODE_ENV==="production",maxAge:28800000}}));app.use(express.static(path.join(__dirname,"public")));
 const me=r=>r.session.user,hash=p=>crypto.createHash("sha256").update(String(p).trim().toUpperCase()).digest("hex"),audit=(id,a,d="")=>q("INSERT INTO audit(actor_id,action,detail) VALUES(?,?,?)").run(id,a,d);
 function auth(r,s,n){if(!me(r))return s.status(401).json({error:"Sign in first"});n()}function admin(r,s,n){if(!me(r)||me(r).role!=="ADMIN")return s.status(403).json({error:"Admin only"});n()}
