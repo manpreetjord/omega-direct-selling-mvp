@@ -30,3 +30,15 @@ Before launch, confirm entity and seller agreements, direct-selling compensation
 
 ## Commission assumption awaiting approval
 Working assumption: qualifying sales are credited to the member who generated them; eligible upstream members may receive commission under a finite or capped, legally reviewed schedule. No commissions are calculated or paid in this starter.
+
+## Optional demo data
+
+Set `DEMO_MODE=true` in `.env` and start the app. It uses a separate
+`data/omega-demo.sqlite` database and seeds four linked members and four
+sample order requests once. Keep this mode behind access control on a hosted
+demo. Clear the flag when running with the regular database.
+
+Sign in as `ravi@omega-demo.example` to see both an upline and a direct child.
+The first startup prints the generated demo member password. Save it privately
+if you need to sign in again. Use your configured admin credentials to see the
+orders and issue a one-time PIN for the tail member, Kabir.
