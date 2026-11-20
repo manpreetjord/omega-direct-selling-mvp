@@ -19,7 +19,25 @@ app.post("/api/admin/pins",auth,admin,(r,s)=>{let {parentId,count=1,expiresInDay
 app.get("/api/admin/summary",auth,admin,(r,s)=>s.json({members:q("SELECT count(*) n FROM users WHERE role='MEMBER'").get().n,pins:q("SELECT count(*) n FROM pins WHERE redeemed_by IS NULL").get().n,orders:q("SELECT count(*) n FROM orders").get().n}));
 app.get("/api/admin/members",auth,admin,(r,s)=>s.json({members:q("SELECT u.id,u.name,u.email,n.parent_id FROM users u LEFT JOIN network n ON n.user_id=u.id WHERE u.role='MEMBER' ORDER BY u.id DESC").all()}));
 app.get("/api/member/network",auth,(r,s)=>{let parent=q("SELECT parent_id FROM network WHERE user_id=?").get(me(r).id)?.parent_id||null,child=q("SELECT u.id,u.name FROM network n JOIN users u ON u.id=n.user_id WHERE n.parent_id=?").get(me(r).id);let up=[],p=parent,seen=new Set(),level=1;while(p&&level<10000&&!seen.has(p)){seen.add(p);let u=q("SELECT id,name FROM users WHERE id=?").get(p);if(!u)break;up.push({...u,level:level++});p=q("SELECT parent_id FROM network WHERE user_id=?").get(p)?.parent_id||null}s.json({parent,child:child||null,upline:up})});
-app.post("/api/orders",(r,s)=>{let {customerName,email,phone,address,quantity=1}=r.body;if(!customerName||!email||!address)return s.status(400).json({error:"Name, email and address required"});let qty=Math.max(1,Math.min(20,+quantity||1)),total=qty*+(process.env.PRODUCT_PRICE_PAISE||100000),ref="OMG-"+crypto.randomBytes(4).toString("hex").toUpperCase();q("INSERT INTO orders(ref,customer_name,email,phone,address,qty,total_paise,created_by) VALUES(?,?,?,?,?,?,?,?)").run(ref,customerName,email,phone||null,address,qty,total,me(r)?.id||null);s.json({ref,totalPaise:total,note:"Demo only: no payment collected."})});
+app.post("/api/orders", (r, s) => {
+  const { customerName, email, phone, address, quantity = 1 } = r.body;
+  if (!customerName || !email || !address) {
+    return s.status(400).json({ error: "Name, email and address required" });
+  }
+
+  // The storefront sends form values as strings. JSON clients can send integers.
+  const qty = typeof quantity === "string" && /^\d+$/.test(quantity) ? Number(quantity) : quantity;
+  if (!Number.isInteger(qty) || qty < 1 || qty > 20) {
+    return s.status(400).json({ error: "Quantity must be a whole number from 1 to 20" });
+  }
+
+  const total = qty * Number(process.env.PRODUCT_PRICE_PAISE || 100000);
+  const ref = "OMG-" + crypto.randomBytes(4).toString("hex").toUpperCase();
+  q(`INSERT INTO orders(ref, customer_name, email, phone, address, qty, total_paise, created_by, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'REQUEST_RECEIVED')`)
+    .run(ref, customerName, email, phone || null, address, qty, total, me(r)?.id || null);
+  s.json({ ref, totalPaise: total, note: "Demo only: no payment collected." });
+});
 app.get("/api/admin/orders",auth,admin,(r,s)=>s.json({orders:q("SELECT * FROM orders ORDER BY id DESC").all()}));
 app.get("/api/health",(r,s)=>s.json({ok:true}));app.get("*",(r,s)=>s.sendFile(path.join(__dirname,"public/index.html")));
 app.listen(process.env.PORT||3000,()=>console.log("Omega MVP on http://localhost:"+(process.env.PORT||3000)));
