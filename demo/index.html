@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Omega+ mock demo</title>
+<style>
+*{box-sizing:border-box}
+body{margin:auto;max-width:640px;padding:24px 16px;background:#edf3f1;color:#12332b;font:16px/1.5 system-ui,sans-serif}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+header b{font-size:25px;letter-spacing:.06em}
+small{color:#3b665a}
+nav{display:flex;gap:6px;margin-bottom:14px}
+button,input{font:inherit}
+button{border:0;border-radius:10px;padding:12px;cursor:pointer;background:#dce9e4;color:#12332b}
+nav button{flex:1}
+button[aria-pressed=true],form button{background:#096048;color:white}
+section{background:white;border-radius:18px;padding:20px}
+h1,h2{line-height:1.15;margin:0 0 12px}
+.price{font-size:28px;font-weight:bold}
+input{width:100%;padding:9px;margin:4px 0;border:1px solid #829d93;border-radius:7px}
+ul{list-style:none;padding:0}
+li{border-top:1px solid #dce9e4;padding:10px 0}
+</style>
+<header><b>OMEGA+</b><small>Mock data demo</small></header>
+<main>
+<nav aria-label="Demo views">
+<button type="button" aria-pressed="true" data-view="store">Storefront</button>
+<button type="button" aria-pressed="false" data-view="member">Member</button>
+<button type="button" aria-pressed="false" data-view="admin">Admin</button>
+</nav>
+<section id="store">
+<h1>Omega-3 Capsules</h1>
+<p><span class="price">₹1,000</span> per bottle</p>
+<form id="order">
+<label>Quantity <input id="quantity" type="number" min="1" max="20" step="1" value="1" required></label>
+<p>Total <strong id="total">₹1,000</strong></p>
+<button>Place demo order request</button>
+</form>
+<p id="message" role="status"></p>
+<small>Uses sample delivery details. No payment is collected.</small>
+</section>
+<section id="member" hidden>
+<h2>Ravi’s member dashboard</h2>
+<p>Asha → <strong>Ravi</strong> → Neha → Kabir</p>
+<dl><dt>Upline</dt><dd>Asha</dd><dt>Direct child</dt><dd>Neha</dd></dl>
+</section>
+<section id="admin" hidden>
+<h2>Admin dashboard</h2>
+<p>4 members · <span id="count">4</span> order requests</p>
+<ul id="orders"></ul>
+<small>Orders you add reset when you reload this page.</small>
+</section>
+</main>
+<script>
+const money = new Intl.NumberFormat("en-IN", {style:"currency",currency:"INR",maximumFractionDigits:0});
+const orders = [1, 2, 1, 3].map((quantity, index) => ({id:index + 1, quantity}));
+const quantity = document.querySelector("#quantity");
+const tabs = document.querySelectorAll("[data-view]");
+
+function renderOrders() {
+  document.querySelector("#count").textContent = orders.length;
+  const rows = orders.slice().reverse().map(order => {
+    const row = document.createElement("li");
+    row.textContent = "DEMO-" + order.id + " · " + order.quantity + " × ₹1,000 · " + money.format(order.quantity * 1000) + " · Request received";
+    return row;
+  });
+  document.querySelector("#orders").replaceChildren(...rows);
+}
+
+tabs.forEach(tab => tab.addEventListener("click", () => {
+  tabs.forEach(item => {
+    item.setAttribute("aria-pressed", String(item === tab));
+    document.getElementById(item.dataset.view).hidden = item !== tab;
+  });
+}));
+
+quantity.addEventListener("input", () => {
+  document.querySelector("#total").textContent = quantity.validity.valid ? money.format(quantity.valueAsNumber * 1000) : "—";
+});
+
+document.querySelector("#order").addEventListener("submit", event => {
+  event.preventDefault();
+  if (!quantity.validity.valid) return;
+  const order = {id:orders.length + 1, quantity:quantity.valueAsNumber};
+  orders.push(order);
+  renderOrders();
+  document.querySelector("#message").textContent = "DEMO-" + order.id + " received. Tap Admin to see it.";
+});
+
+renderOrders();
+</script>
+</html>
